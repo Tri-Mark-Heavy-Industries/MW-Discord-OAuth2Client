@@ -54,7 +54,7 @@ class SpecialOAuth2Client extends SpecialPage {
 			'clientId'                => $wgOAuth2Client['client']['id'],    // The client ID assigned to you by the provider
 			'clientSecret'            => $wgOAuth2Client['client']['secret'],   // The client password assigned to you by the provider
 			'redirectUri'             => $wgOAuth2Client['configuration']['redirect_uri'],
-			'scopes'                  => $wgOAuth2Client['configuration']['scopes'],
+			'scopes'                  => $scopes,
 			'urlAuthorize'            => 'https://discordapp.com/api/oauth2/authorize',
 			'urlAccessToken'          => 'https://discordapp.com/api/oauth2/token',
 			'urlResourceOwnerDetails' => 'https://discordapp.com/api/users/@me'
