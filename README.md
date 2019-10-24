@@ -1,11 +1,11 @@
-# MediaWiki Discord OAuth2 Client
-Discord specific implementation of the [MediaWiki OAuth2 Client](https://github.com/Schine/MW-OAuth2Client)
+# MediaWiki T-MHI Discord OAuth2 Client
+A T-MHI fork of the [MediaWiki Discord OAuth2 Client](https://github.com/DarkMatterMatt/MW-Discord-OAuth2Client).
 
 Requires MediaWiki 1.25+.
 
 ## Installation
 
-Clone this repo into the extension directory. In the cloned directory, run 'git submodule update --init' to initialize the local configuration file and fetch all data from the OAuth2 client library.
+Clone this repo into the extension directory. In the cloned directory, run `git submodule update --init` to initialize the local configuration file and fetch all data from the OAuth2 client library.
 
 Finally, run [composer](https://getcomposer.org/) in /vendors/oauth2-client to install the library dependency.
 
@@ -27,7 +27,7 @@ Required settings to be added to LocalSettings.php
 $wgOAuth2Client['client']['id']     = ''; // The client ID assigned to you by the provider
 $wgOAuth2Client['client']['secret'] = ''; // The client secret assigned to you by the provider
 $wgOAuth2Client['configuration']['redirect_uri'] = ''; // URL for OAuth2 server to redirect to
-$wgOAuth2Client['configuration']['scopes'] = ''; // Permissions, refer to https://discordapp.com/developers/docs/topics/oauth2#shared-resources-oauth2-scopes
+$wgOAuth2Client['configuration']['scopes'] = 'identity'; // Permissions, refer to https://discordapp.com/developers/docs/topics/oauth2#shared-resources-oauth2-scopes
 ```
 
 The **Redirect URI** for your wiki should be:

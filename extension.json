@@ -1,13 +1,11 @@
 {
-	"name": "MW-OAuth2Client",
+	"name": "MW-TMHI-Discord-OAuth2Client",
 	"version": "0.4",
 	"author": [
-		"[http://dekeijzer.org Joost de Keijzer]",
-		"[https://www.mediawiki.org/wiki/User:Nischayn22 Nischay Nahata]",
-		"[https://star-made.org Schine GmbH]"
+		"[https://mattm.win Matt Moran]"
 	],
-	"url": "https://www.mediawiki.org/wiki/Extension:OAuth2_Client",
-	"descriptionmsg": "oauth2client-act-as-a-client-to-any-oauth2-server",
+	"url": "https://www.mediawiki.org/wiki/Extension:TMHI-Discord-OAuth2Client",
+	"descriptionmsg": "Discord-OAuth2Client-Act-as-a-Discord-OAuth2-client",
 	"license-name": "LGPL-3.0",
 	"type": "other",
 	"AutoloadClasses": {
