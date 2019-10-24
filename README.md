@@ -18,7 +18,7 @@ composer install
 Add the following line to your LocalSettings.php file.
 
 ```
-wfLoadExtension( 'MW-OAuth2Client' );
+wfLoadExtension('MW-TMHI-Discord-OAuth2Client');
 ```
 
 Required settings to be added to LocalSettings.php
