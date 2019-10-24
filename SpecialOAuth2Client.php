@@ -18,6 +18,9 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 	die( 'This is a MediaWiki extension, and must be run from within MediaWiki.' );
 }
 
+require_once __DIR__.'/TmhiDatabase.php';
+require_once __DIR__.'/DiscordUser.php';
+
 class SpecialOAuth2Client extends SpecialPage {
 
 	private $_provider;
@@ -54,7 +57,7 @@ class SpecialOAuth2Client extends SpecialPage {
 			'clientId'                => $wgOAuth2Client['client']['id'],    // The client ID assigned to you by the provider
 			'clientSecret'            => $wgOAuth2Client['client']['secret'],   // The client password assigned to you by the provider
 			'redirectUri'             => $wgOAuth2Client['configuration']['redirect_uri'],
-			'scopes'                  => $wgOAuth2Client['configuration']['scopes'],
+			'scopes'                  => $scopes,
 			'urlAuthorize'            => 'https://discordapp.com/api/oauth2/authorize',
 			'urlAccessToken'          => 'https://discordapp.com/api/oauth2/token',
 			'urlResourceOwnerDetails' => 'https://discordapp.com/api/users/@me'
@@ -155,80 +158,132 @@ class SpecialOAuth2Client extends SpecialPage {
 		return true;
 	}
 
-	/*  @brief  Returns a MW::User from the provided accessToken and response.
-	* 
-	*  @param  $accessToken  [
-	*	  'accessToken' => 'examples0zEeL7JedtrxONjkCDVRDM',
-	*	  'expires' => 1572514877,
-	*	  'refreshToken' => 'exampleW85x7p5qX6VL0WySMEtcdQ4',
-	*	  'resourceOwnerId' => NULL,
-	*	  'values' => [
-	*		  'scope' => 'identify email',
-	*		  'token_type' => 'Bearer'
-	*	  ]
-	*  ]
-	*  @param  $response  [
-	*	  'username' => 'Example',
-	*	  'verified' => true,
-	*	  'locale' => 'en-US',
-	*	  'mfa_enabled' => true,
-	*	  'id' => '123456789123456789',
-	*	  'flags' => 0,
-	*	  'avatar' => 'example1d39b4ffc5d38b7c5694459f8',
-	*	  'discriminator' => '1234',
-	*	  'email' => 'requiresEmailScope@example.com'
-	*  ]
-	*/
-	protected function _userHandling($accessToken, $response) {
-		global $wgOAuth2Client, $wgAuth, $wgRequest;
+    /* @brief  Returns a MW::User from the provided accessToken and response.
+    * 
+    *  @param  $accessToken  [
+    *      'accessToken' => 'examples0zEeL7JedtrxONjkCDVRDM',
+    *      'expires' => 1572514877,
+    *      'refreshToken' => 'exampleW85x7p5qX6VL0WySMEtcdQ4',
+    *      'resourceOwnerId' => NULL,
+    *      'values' => [
+    *          'scope' => 'identify email',
+    *          'token_type' => 'Bearer'
+    *      ]
+    *  ]
+    *  @param  $response  [
+    *      'username' => 'Example',
+    *      'verified' => true,
+    *      'locale' => 'en-US',
+    *      'mfa_enabled' => true,
+    *      'id' => '123456789123456789',
+    *      'flags' => 0,
+    *      'avatar' => 'example1d39b4ffc5d38b7c5694459f8',
+    *      'discriminator' => '1234',
+    *      'email' => 'requiresEmailScope@example.com'
+    *  ]
+    */
+    protected function _userHandling($accessToken, $response) {
+        global $wgOAuth2Client, $wgAuth, $wgRequest;
+        
+        // Discord accounts must be verified
+        if (!$response['verified']) {
+            $wgRequest->getSession()->persist();
+            $wgRequest->getSession()->set('returnto', 'Join T-MHI');
+            $wgRequest->getSession()->save();
+            return;
+        }
 
-		$username = $response['username'];
+        // open the T-MHI database
+        $tmhiDb = new TmhiDatabase(
+            $wgOAuth2Client['mysql']['host'],
+            $wgOAuth2Client['mysql']['database'],
+            $wgOAuth2Client['mysql']['user'],
+            $wgOAuth2Client['mysql']['password']
+        );
+        
+        // store access token & load DiscordUser from TMHI database
+        $discordId = $response['id'];
+        $tmhiDb->storeAccessToken($discordId, $accessToken);
+        $discordUser = $tmhiDb->getDiscordUserById($discordId);
 
-		// change square brackets to parentheses
-		$username = str_replace('[', '(', $username);
-		$username = str_replace(']', ')', $username);
+        // load user display name (from T-MHI database, fallback to discord username)
+        $username = $discordUser->getDisplayName() || $response['username'];
 
-		// https://www.mediawiki.org/wiki/Manual:Title.php#Article_name
-		//   "Extended" characters in the 0x80..0xFF range are allowed. Other characters may be ASCII
-		//   letters, digits, hyphen, comma, period, apostrophe, parentheses, and colon.
-		//   No other ASCII characters are allowed, and will be deleted if found.
-		$username = preg_replace('/[^\x80-\xFF\w\ \-\,\.\'\"\(\)\:]/', '', $username);
+        // change square brackets to parentheses
+        $username = str_replace('[', '(', $username);
+        $username = str_replace(']', ')', $username);
 
-		// load user from username, create it if it doesn't exist
-		$user = User::newFromName($username, 'creatable');
-		if (!$user) {
-			throw new MWException('Could not create user with username:' . $username);
-			die();
-		}
-		$user->setRealName($username);
+        // User::isCreatableName()
+        //   "Extended" characters in the 0x80..0xFF range are allowed. Other characters may be ASCII
+        //   letters, digits, hyphen, comma, period, apostrophe and parentheses.
+        //   No other ASCII characters are allowed, and will be deleted if found.
+        $username = preg_replace('/[^\x80-\xFF\w\ \-\,\.\'\"\(\)]/', '', $username);
 
-		if (isset($response['email'])) {
-			$email = $response['email'];
-			$user->setEmail($email);
-		}
+        // not a member of T-MHI. Redirect to that page
+        if (!$discordUser || !$discordUser->isTmhiMember()) {
+            $wgRequest->getSession()->persist();
+            $wgRequest->getSession()->set('returnto', 'Join T-MHI');
+            $wgRequest->getSession()->save();
+            return;
+        }
+        
+        // not authorised to have a wiki account
+        if (!$discordUser->hasWikiAccess()) {
+            $wgRequest->getSession()->persist();
+            $wgRequest->getSession()->set('returnto', 'Request Wiki Access');
+            $wgRequest->getSession()->save();
+            return;
+        }
 
-		$user->load();
-		if ( !( $user instanceof User && $user->getId() ) ) {
-			$user->addToDatabase();
-			// MediaWiki recommends below code instead of addToDatabase to create user but it seems to fail.
-			// $authManager = MediaWiki\Auth\AuthManager::singleton();
-			// $authManager->autoCreateUser( $user, MediaWiki\Auth\AuthManager::AUTOCREATE_SOURCE_SESSION );
-			if (isset($response['email'])) {
-				$user->confirmEmail();
-			}
-		}
+        // add email to discord user
+        if (!$discordUser->getEmail() && isset($response['email'])) {
+            $email = $response['email'];
+            $user->setEmail($email);
+        }
+        
+        // load user if exists
+        if ($wikiId = $discordUser->getWikiId()) {
+            $user = User::newFromId($wikiId);
+            $user->setName($username);
+        }
+        else {
+            // create new user
+            $user = User::newFromName($username, 'creatable');
+            if (!$user) {
+                throw new MWException('Could not create user with username:' . $username);
+                die();
+            }
 
-		// Setup the session
-		$wgRequest->getSession()->persist();
-		$user->setToken();
-		$user->setCookies();
-		$user->saveSettings();
-		$this->getContext()->setUser( $user );
+            if ($user->getId()) {
+                // MediaWiki recommends below code instead of addToDatabase to create user but it seems to fail.
+                // $authManager = MediaWiki\Auth\AuthManager::singleton();
+                // $authManager->autoCreateUser( $user, MediaWiki\Auth\AuthManager::AUTOCREATE_SOURCE_SESSION );
+                $user->addToDatabase();
+            }
 
-		global $wgUser;
-		$wgUser = $user;
-		$sessionUser = User::newFromSession($this->getRequest());
-		$sessionUser->load();
-	}
+            // add and confirm email
+            if (isset($email)) {
+                $user->setEmail($email);
+                $user->confirmEmail();
+            }
+            
+            // add wiki id to T-MHI database
+            $discordUser->setWikiId($user->getId());
+        }
+        
+        $tmhiDb->storeDiscordUser($discordUser);
+
+        // setup the session
+        $wgRequest->getSession()->persist();
+        $user->setToken();
+        $user->setCookies();
+        $user->saveSettings();
+        $this->getContext()->setUser($user);
+
+        global $wgUser;
+        $wgUser = $user;
+        $sessionUser = User::newFromSession($this->getRequest());
+        $sessionUser->load();
+    }
 
 }
