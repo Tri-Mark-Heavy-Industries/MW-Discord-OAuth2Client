@@ -17,7 +17,6 @@
 if ( !defined( 'MEDIAWIKI' ) ) {
 	die( 'This is a MediaWiki extension, and must be run from within MediaWiki.' );
 }
-require __DIR__.'/JsonHelper.php';
 
 class SpecialOAuth2Client extends SpecialPage {
 
@@ -30,11 +29,11 @@ class SpecialOAuth2Client extends SpecialPage {
 	 * $wgOAuth2Client['client']['secret']
 	 * //$wgOAuth2Client['client']['callback_url'] // extension should know
 	 *
-	 * $wgOAuth2Client['configuration']['authorize_endpoint']
-	 * $wgOAuth2Client['configuration']['access_token_endpoint']
+	 * //$wgOAuth2Client['configuration']['authorize_endpoint'] // extension should know
+	 * //$wgOAuth2Client['configuration']['access_token_endpoint'] // extension should know
 	 * $wgOAuth2Client['configuration']['http_bearer_token']
 	 * $wgOAuth2Client['configuration']['query_parameter_token']
-	 * $wgOAuth2Client['configuration']['api_endpoint']
+	 * //$wgOAuth2Client['configuration']['api_endpoint'] // extension should know
 	 */
 	public function __construct() {
 
@@ -44,14 +43,21 @@ class SpecialOAuth2Client extends SpecialPage {
 
 		require __DIR__ . '/vendors/oauth2-client/vendor/autoload.php';
 
+        // default to 'identify' scope
+		$scopes = (
+			isset($wgOAuth2Client['configuration']['scopes']) && strlen($wgOAuth2Client['configuration']['scopes'] > 0)
+				? $wgOAuth2Client['configuration']['scopes']
+				: 'identify'
+        );
+
 		$this->_provider = new \League\OAuth2\Client\Provider\GenericProvider([
 			'clientId'                => $wgOAuth2Client['client']['id'],    // The client ID assigned to you by the provider
 			'clientSecret'            => $wgOAuth2Client['client']['secret'],   // The client password assigned to you by the provider
 			'redirectUri'             => $wgOAuth2Client['configuration']['redirect_uri'],
-			'urlAuthorize'            => $wgOAuth2Client['configuration']['authorize_endpoint'],
-			'urlAccessToken'          => $wgOAuth2Client['configuration']['access_token_endpoint'],
-			'urlResourceOwnerDetails' => $wgOAuth2Client['configuration']['api_endpoint'],
-			'scopes'                  => $wgOAuth2Client['configuration']['scopes']
+			'scopes'                  => $wgOAuth2Client['configuration']['scopes'],
+			'urlAuthorize'            => 'https://discordapp.com/api/oauth2/authorize',
+			'urlAccessToken'          => 'https://discordapp.com/api/oauth2/token',
+			'urlResourceOwnerDetails' => 'https://discordapp.com/api/users/@me'
 		]);
 	}
 
@@ -115,9 +121,8 @@ class SpecialOAuth2Client extends SpecialPage {
 			exit($e->getMessage());
 		}
 
-		$resourceOwner = $this->_provider->getResourceOwner($accessToken);
-		$user = $this->_userHandling( $resourceOwner->toArray() );
-		$user->setCookies();
+		$response = $this->_provider->getResourceOwner($accessToken)->toArray();
+		$this->_userHandling($accessToken, $response);
 
 		global $wgOut, $wgRequest;
 		$title = null;
@@ -137,7 +142,7 @@ class SpecialOAuth2Client extends SpecialPage {
 
 	private function _default(){
 		global $wgOAuth2Client, $wgOut, $wgUser, $wgScriptPath, $wgExtensionAssetsPath;
-		$service_name = ( isset( $wgOAuth2Client['configuration']['service_name'] ) && 0 < strlen( $wgOAuth2Client['configuration']['service_name'] ) ? $wgOAuth2Client['configuration']['service_name'] : 'OAuth2' );
+		$service_name = ( isset( $wgOAuth2Client['configuration']['service_name'] ) && 0 < strlen( $wgOAuth2Client['configuration']['service_name'] ) ? $wgOAuth2Client['configuration']['service_name'] : 'Discord' );
 
 		$wgOut->setPagetitle( wfMessage( 'oauth2client-login-header', $service_name)->text() );
 		if ( !$wgUser->isLoggedIn() ) {
@@ -150,39 +155,80 @@ class SpecialOAuth2Client extends SpecialPage {
 		return true;
 	}
 
-	protected function _userHandling( $response ) {
+	/*  @brief  Returns a MW::User from the provided accessToken and response.
+	* 
+	*  @param  $accessToken  [
+	*	  'accessToken' => 'examples0zEeL7JedtrxONjkCDVRDM',
+	*	  'expires' => 1572514877,
+	*	  'refreshToken' => 'exampleW85x7p5qX6VL0WySMEtcdQ4',
+	*	  'resourceOwnerId' => NULL,
+	*	  'values' => [
+	*		  'scope' => 'identify email',
+	*		  'token_type' => 'Bearer'
+	*	  ]
+	*  ]
+	*  @param  $response  [
+	*	  'username' => 'Example',
+	*	  'verified' => true,
+	*	  'locale' => 'en-US',
+	*	  'mfa_enabled' => true,
+	*	  'id' => '123456789123456789',
+	*	  'flags' => 0,
+	*	  'avatar' => 'example1d39b4ffc5d38b7c5694459f8',
+	*	  'discriminator' => '1234',
+	*	  'email' => 'requiresEmailScope@example.com'
+	*  ]
+	*/
+	protected function _userHandling($accessToken, $response) {
 		global $wgOAuth2Client, $wgAuth, $wgRequest;
 
-		$username = JsonHelper::extractValue($response, $wgOAuth2Client['configuration']['username']);
-		$email =  JsonHelper::extractValue($response, $wgOAuth2Client['configuration']['email']);
+		$username = $response['username'];
 
+		// change square brackets to parentheses
+		$username = str_replace('[', '(', $username);
+		$username = str_replace(']', ')', $username);
+
+		// https://www.mediawiki.org/wiki/Manual:Title.php#Article_name
+		//   "Extended" characters in the 0x80..0xFF range are allowed. Other characters may be ASCII
+		//   letters, digits, hyphen, comma, period, apostrophe, parentheses, and colon.
+		//   No other ASCII characters are allowed, and will be deleted if found.
+		$username = preg_replace('/[^\x80-\xFF\w\ \-\,\.\'\"\(\)\:]/', '', $username);
+
+		// load user from username, create it if it doesn't exist
 		$user = User::newFromName($username, 'creatable');
 		if (!$user) {
 			throw new MWException('Could not create user with username:' . $username);
 			die();
 		}
 		$user->setRealName($username);
-		$user->setEmail($email);
+
+		if (isset($response['email'])) {
+			$email = $response['email'];
+			$user->setEmail($email);
+		}
+
 		$user->load();
 		if ( !( $user instanceof User && $user->getId() ) ) {
 			$user->addToDatabase();
 			// MediaWiki recommends below code instead of addToDatabase to create user but it seems to fail.
 			// $authManager = MediaWiki\Auth\AuthManager::singleton();
 			// $authManager->autoCreateUser( $user, MediaWiki\Auth\AuthManager::AUTOCREATE_SOURCE_SESSION );
-			$user->confirmEmail();
+			if (isset($response['email'])) {
+				$user->confirmEmail();
+			}
 		}
-		$user->setToken();
 
 		// Setup the session
 		$wgRequest->getSession()->persist();
+		$user->setToken();
 		$user->setCookies();
-		$this->getContext()->setUser( $user );
 		$user->saveSettings();
+		$this->getContext()->setUser( $user );
+
 		global $wgUser;
 		$wgUser = $user;
 		$sessionUser = User::newFromSession($this->getRequest());
 		$sessionUser->load();
-		return $user;
 	}
 
 }
