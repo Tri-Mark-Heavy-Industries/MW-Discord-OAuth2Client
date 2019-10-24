@@ -44,11 +44,9 @@ class SpecialOAuth2Client extends SpecialPage {
 		require __DIR__ . '/vendors/oauth2-client/vendor/autoload.php';
 
         // default to 'identify' scope
-		$scopes = (
-			isset($wgOAuth2Client['configuration']['scopes']) && strlen($wgOAuth2Client['configuration']['scopes'] > 0)
-				? $wgOAuth2Client['configuration']['scopes']
-				: 'identify'
-        );
+		$scopes = $wgOAuth2Client['configuration']['scopes']
+            ? $wgOAuth2Client['configuration']['scopes']
+            : 'identify';
 
 		$this->_provider = new \League\OAuth2\Client\Provider\GenericProvider([
 			'clientId'                => $wgOAuth2Client['client']['id'],    // The client ID assigned to you by the provider
