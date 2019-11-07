@@ -199,14 +199,14 @@ class SpecialOAuth2Client extends SpecialPage {
             $wgOAuth2Client['mysql']['password']
         );
         
-        // store access token & load DiscordUser from TMHI database
+        // store access token & load TmhiMember from TMHI database
         $discordId = $response['id'];
         $tmhiDb->storeAccessToken($discordId, $accessToken);
-        $discordUser = $tmhiDb->getDiscordUserById($discordId);
+        $tmhiMember = $tmhiDb->loadTmhiMember($discordId);
 
         // load user display name (from T-MHI database, fallback to discord username)
-        $username = $discordUser->getDisplayName()
-            ? $discordUser->getDisplayName()
+        $username = $tmhiMember->displayName
+            ? $tmhiMember->displayName
             : $response['username'];
 
         // change square brackets to parentheses
@@ -219,31 +219,22 @@ class SpecialOAuth2Client extends SpecialPage {
         //   No other ASCII characters are allowed, and will be deleted if found.
         $username = preg_replace('/[^\x80-\xFF\w\ \-\,\.\'\"\(\)]/', '', $username);
 
-        // not a member of T-MHI. Redirect to that page
-        if (!$discordUser || !$discordUser->isTmhiMember()) {
-            $wgRequest->getSession()->persist();
-            $wgRequest->getSession()->set('returnto', 'Join T-MHI');
-            $wgRequest->getSession()->save();
-            return;
-        }
-        
-        // not authorised to have a wiki account
-        if (!$discordUser->hasWikiAccess()) {
+        // not a member of T-MHI or not authorised to have a wiki account
+        if (!$tmhiMember || !$tmhiMember->hasWikiAccess()) {
             $wgRequest->getSession()->persist();
             $wgRequest->getSession()->set('returnto', 'Request Wiki Access');
             $wgRequest->getSession()->save();
             return;
         }
 
-        // add email to discord user
-        if (!$discordUser->getEmail() && isset($response['email'])) {
-            $email = $response['email'];
-            $discordUser->setEmail($email);
+        // add email to TMHI member
+        if (!$tmhiMember->email && isset($response['email'])) {
+            $tmhiMember->email = $response['email'];
         }
         
         // load user if exists
-        if ($wikiId = $discordUser->getWikiId()) {
-            $user = User::newFromId($wikiId);
+        if ($tmhiMember->wikiId) {
+            $user = User::newFromId($tmhiMember->wikiId);
             $user->setName($username);
         }
         else {
@@ -268,10 +259,10 @@ class SpecialOAuth2Client extends SpecialPage {
             }
             
             // add wiki id to T-MHI database
-            $discordUser->setWikiId($user->getId());
+            $tmhiMember->wikiId = $user->getId();
         }
         
-        $tmhiDb->storeDiscordUser($discordUser);
+        $tmhiDb->storeTmhiMember($tmhiMember);
 
         // setup the session
         $wgRequest->getSession()->persist();

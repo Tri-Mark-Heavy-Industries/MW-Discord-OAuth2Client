@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__.'/DiscordUser.php';
+require_once __DIR__.'/TmhiMember.php';
 
 class TmhiDatabase {
     private $_conn;
@@ -13,63 +13,114 @@ class TmhiDatabase {
 	}
 
 	public function storeAccessToken($discordId, $accessToken)	{
-        $token = $accessToken->getToken();
-        $expires = $accessToken->getExpires();
+        $token        = $accessToken->getToken();
+        $expires      = $accessToken->getExpires();
         $refreshToken = $accessToken->getRefreshToken();
 
         $statement = $this->_conn->prepare('
-            INSERT INTO users (discordid, discordtoken, discordtokenexpires, discordrefreshtoken)
-            VALUES (:discordid, :token, :tokenexpires, :refreshtoken)
+            INSERT INTO users (id, discordtoken, discordtokenexpires, discordrefreshtoken)
+            VALUES (:id, :token, :tokenexpires, :refreshtoken)
             ON DUPLICATE KEY
-            UPDATE discordtoken = :token, discordtokenexpires = :tokenexpires, discordrefreshtoken = :refreshtoken
+            UPDATE discordtoken=:token, discordtokenexpires=:tokenexpires, discordrefreshtoken=:refreshtoken
         ');
-
         $statement->execute([
-            'discordid' => $discordId,
-            'token' => $token,
+            'id'           => $discordId,
+            'token'        => $token,
             'tokenexpires' => $expires,
             'refreshtoken' => $refreshToken,
         ]);
 	}
 
-	public function storeDiscordUser($discordUser) {
+	public function storeTmhiMember($tmhiMember) {
         $statement = $this->_conn->prepare('
             UPDATE users
             SET wikiid=:wikiid, email=:email
-            WHERE discordid=:discordid
+            WHERE id=:discordid
         ');
-
         $statement->execute([
-            'wikiid' => $discordUser->getWikiId(),
-            'email' => $discordUser->getEmail(),
-            'discordid' => $discordUser->getDiscordId(),
+            'wikiid'    => $tmhiMember->wikiId,
+            'email'     => $tmhiMember->email,
+            'discordid' => $tmhiMember->discordId,
         ]);
-	}
-
-	public function getDiscordUserById($discordId) {
+    }
+    
+    /*
+    * Retrieve a Discord user from the database.
+    *
+    * @param    discordId  The Discord Snowflake ID of the user to load from the database.
+    * @returns  A TmhiMember object.
+    */
+	public function loadTmhiMember($discordId) {
+        // load user
         $statement = $this->_conn->prepare('
-            SELECT displayname, permissions, wikiid, email
+            SELECT displayname, wikiid, email, timezone
             FROM users
-            WHERE discordid=:discordid
+            WHERE id=:discordid
         ');
-
         $statement->execute([
             'discordid' => $discordId,
         ]);
-
-        $result = $statement->fetch(PDO::FETCH_ASSOC);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
 
         // no user found
-        if (!$result) {
+        if (!$row) {
             return false;
         }
+        $displayName = $row['displayname'];
+        $wikiid      = $row['wikiid'];
+        $email       = $row['email'];
+        $timezone    = $row['timezone'];
 
-		return new DiscordUser(
+        // load roles for user
+        $statement = $this->_conn->prepare('
+            SELECT roles.id as id, roles.name as name, roles.description as description
+            FROM userroles
+            JOIN roles ON userroles.roleid=roles.id
+            WHERE userroles.userid=:discordid
+        ');
+        $statement->execute([
+            'discordid' => $discordId,
+        ]);
+        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+        var_dump($rows);
+
+        // map roles into an array
+        $roles = [];
+        foreach ($rows as $row) {
+            $roles[$row['id']] = [
+                name        => $row['name'],
+                description => $row['description'],
+            ];
+        }
+
+        // load permissions for user (if the user has at least one role)
+        $permissions = [];
+        if (count($roles)) {
+            $statement = $this->_conn->prepare('
+                SELECT permissions.id as id, permissions.name as name, permissions.description as description
+                FROM rolepermissions
+                JOIN permissions ON rolepermissions.permissionid=permissions.id
+                WHERE rolepermissions.roleid IN (' . join(',', array_fill(0, count($roles), '?')) . ')
+            ');
+            $statement->execute(array_keys($roles));
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+    
+            // map permissions into an array
+            foreach ($rows as $row) {
+                $permissions[$row['id']] = [
+                    name        => $row['name'],
+                    description => $row['description'],
+                ];
+            }
+        }
+
+		return new TmhiMember(
             $discordId,
-            $result['displayname'],
-            (int) $result['permissions'],
-            (int) $result['wikiid'],
-            $result['email']
+            $displayName,
+            $permissions,
+            $wikiid,
+            $email,
+            $timezone
         );
 	}
 }
