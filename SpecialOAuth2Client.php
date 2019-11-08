@@ -19,7 +19,6 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 }
 
 require_once __DIR__.'/TmhiDatabase.php';
-require_once __DIR__.'/DiscordUser.php';
 
 class SpecialOAuth2Client extends SpecialPage {
 
