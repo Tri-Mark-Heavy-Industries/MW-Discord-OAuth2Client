@@ -73,7 +73,7 @@ class TmhiDatabase {
 
         // load roles for user
         $statement = $this->_conn->prepare('
-            SELECT roles.id as id, roles.name as name, roles.description as description
+            SELECT roles.id as id, roles.name as name, roles.comment as comment
             FROM userroles
             JOIN roles ON userroles.roleid=roles.id
             WHERE userroles.userid=:discordid
@@ -82,14 +82,13 @@ class TmhiDatabase {
             'discordid' => $discordId,
         ]);
         $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
-        var_dump($rows);
 
         // map roles into an array
         $roles = [];
         foreach ($rows as $row) {
             $roles[$row['id']] = [
-                name        => $row['name'],
-                description => $row['description'],
+                'name'    => $row['name'],
+                'comment' => $row['comment'],
             ];
         }
 
@@ -97,7 +96,7 @@ class TmhiDatabase {
         $permissions = [];
         if (count($roles)) {
             $statement = $this->_conn->prepare('
-                SELECT permissions.id as id, permissions.name as name, permissions.description as description
+                SELECT permissions.id as id, permissions.name as name, permissions.comment as comment
                 FROM rolepermissions
                 JOIN permissions ON rolepermissions.permissionid=permissions.id
                 WHERE rolepermissions.roleid IN (' . join(',', array_fill(0, count($roles), '?')) . ')
@@ -108,8 +107,8 @@ class TmhiDatabase {
             // map permissions into an array
             foreach ($rows as $row) {
                 $permissions[$row['id']] = [
-                    name        => $row['name'],
-                    description => $row['description'],
+                    'name'    => $row['name'],
+                    'comment' => $row['comment'],
                 ];
             }
         }

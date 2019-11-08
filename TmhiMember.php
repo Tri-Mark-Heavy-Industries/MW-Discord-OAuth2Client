@@ -22,13 +22,13 @@ class TmhiMember {
     }
 
     private function hasPermission($permission) {
-        if (array_key_exists(GOD_MODE, $this->tmhiPermissions)) {
+        if (array_key_exists(self::GOD_MODE, $this->tmhiPermissions)) {
             return true;
         }
         return array_key_exists($permission, $this->tmhiPermissions);
     }
 
 	public function hasWikiAccess() {
-        return $this->hasPermission(WIKI_ACCESS);
+        return $this->hasPermission(self::WIKI_ACCESS);
     }
 }
