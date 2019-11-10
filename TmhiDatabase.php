@@ -18,7 +18,7 @@ class TmhiDatabase {
         $refreshToken = $accessToken->getRefreshToken();
 
         $statement = $this->_conn->prepare('
-            INSERT INTO users (id, discordtoken, discordtokenexpires, discordrefreshtoken)
+            INSERT INTO members (id, discordtoken, discordtokenexpires, discordrefreshtoken)
             VALUES (:id, :token, :tokenexpires, :refreshtoken)
             ON DUPLICATE KEY
             UPDATE discordtoken=:token, discordtokenexpires=:tokenexpires, discordrefreshtoken=:refreshtoken
@@ -33,7 +33,7 @@ class TmhiDatabase {
 
 	public function storeTmhiMember($tmhiMember) {
         $statement = $this->_conn->prepare('
-            UPDATE users
+            UPDATE members
             SET wikiid=:wikiid, email=:email
             WHERE id=:discordid
         ');
@@ -54,7 +54,7 @@ class TmhiDatabase {
         // load user
         $statement = $this->_conn->prepare('
             SELECT displayname, wikiid, email, timezone
-            FROM users
+            FROM members
             WHERE id=:discordid
         ');
         $statement->execute([
@@ -74,9 +74,9 @@ class TmhiDatabase {
         // load roles for user
         $statement = $this->_conn->prepare('
             SELECT roles.id as id, roles.name as name, roles.comment as comment
-            FROM userroles
-            JOIN roles ON userroles.roleid=roles.id
-            WHERE userroles.userid=:discordid
+            FROM memberroles
+            JOIN roles ON memberroles.roleid=roles.id
+            WHERE memberroles.userid=:discordid
         ');
         $statement->execute([
             'discordid' => $discordId,

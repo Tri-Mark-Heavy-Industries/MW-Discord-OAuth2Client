@@ -203,6 +203,14 @@ class SpecialOAuth2Client extends SpecialPage {
         $tmhiDb->storeAccessToken($discordId, $accessToken);
         $tmhiMember = $tmhiDb->loadTmhiMember($discordId);
 
+        // not a member of T-MHI or not authorised to have a wiki account
+        if (!$tmhiMember || !$tmhiMember->hasWikiAccess()) {
+            $wgRequest->getSession()->persist();
+            $wgRequest->getSession()->set('returnto', 'Request Wiki Access');
+            $wgRequest->getSession()->save();
+            return;
+        }
+
         // load user display name (from T-MHI database, fallback to discord username)
         $username = $tmhiMember->displayName
             ? $tmhiMember->displayName
@@ -217,14 +225,6 @@ class SpecialOAuth2Client extends SpecialPage {
         //   letters, digits, hyphen, comma, period, apostrophe and parentheses.
         //   No other ASCII characters are allowed, and will be deleted if found.
         $username = preg_replace('/[^\x80-\xFF\w\ \-\,\.\'\"\(\)]/', '', $username);
-
-        // not a member of T-MHI or not authorised to have a wiki account
-        if (!$tmhiMember || !$tmhiMember->hasWikiAccess()) {
-            $wgRequest->getSession()->persist();
-            $wgRequest->getSession()->set('returnto', 'Request Wiki Access');
-            $wgRequest->getSession()->save();
-            return;
-        }
 
         // add email to TMHI member
         if (!$tmhiMember->email && isset($response['email'])) {
