@@ -11,6 +11,30 @@ class TmhiDatabase {
         // set the PDO error mode to exception
         $this->_conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
+
+    /**
+     * Create, bind, execute and fetch a single result of a SQL query
+     * @param string $sql The query to execute
+     * @param string $params Parameters to bind
+     * @param array A single result in a named array
+     */
+    private function _query($sql, $params) {
+        $statement = $this->_conn->prepare($sql);
+        $statement->execute($params);
+        return $statement->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Create, bind, execute and fetch all results of a SQL query
+     * @param string $sql The query to execute
+     * @param string $params Parameters to bind
+     * @param array[] An array of results in named arrays
+     */
+    private function _queryAll($sql, $params) {
+        $statement = $this->_conn->prepare($sql);
+        $statement->execute($params);
+        return $statement->fetchAll(PDO::FETCH_ASSOC);
+    }
     
     /**
      * Store a Discord member's access token
@@ -22,13 +46,12 @@ class TmhiDatabase {
         $expires      = $accessToken->getExpires();
         $refreshToken = $accessToken->getRefreshToken();
 
-        $statement = $this->_conn->prepare('
+        $this->_query('
             INSERT INTO members (id, discordtoken, discordtokenexpires, discordrefreshtoken)
             VALUES (:id, :token, :tokenexpires, :refreshtoken)
             ON DUPLICATE KEY
             UPDATE discordtoken=:token, discordtokenexpires=:tokenexpires, discordrefreshtoken=:refreshtoken
-        ');
-        $statement->execute([
+        ', [
             'id'           => $discordId,
             'token'        => $token,
             'tokenexpires' => $expires,
@@ -41,12 +64,11 @@ class TmhiDatabase {
      * @param TmhiMember $tmhiMember The member to add
      */
     public function storeTmhiMember($tmhiMember) {
-        $statement = $this->_conn->prepare('
+        $this->_query('
             UPDATE members
             SET wikiid=:wikiid, email=:email
             WHERE id=:discordid
-        ');
-        $statement->execute([
+        ', [
             'wikiid'    => $tmhiMember->wikiId,
             'email'     => $tmhiMember->email,
             'discordid' => $tmhiMember->discordId,
@@ -60,15 +82,11 @@ class TmhiDatabase {
     */
     public function loadTmhiMember($discordId) {
         // load user
-        $statement = $this->_conn->prepare('
+        $row = $this->_query('
             SELECT displayname, wikiid, email, timezone
             FROM members
             WHERE id=:discordid
-        ');
-        $statement->execute([
-            'discordid' => $discordId,
-        ]);
-        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        ', [ 'discordid' => $discordId ]);
 
         // no user found
         if (!$row) {
@@ -80,16 +98,12 @@ class TmhiDatabase {
         $timezone    = $row['timezone'];
 
         // load roles for user
-        $statement = $this->_conn->prepare('
+        $rows = $this->_queryAll('
             SELECT roles.id as id, roles.name as name, roles.comment as comment
             FROM memberroles
             JOIN roles ON memberroles.roleid=roles.id
             WHERE memberroles.userid=:discordid
-        ');
-        $statement->execute([
-            'discordid' => $discordId,
-        ]);
-        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+        ', [ 'discordid' => $discordId ]);
 
         // map roles into an array
         $roles = [];
@@ -103,14 +117,12 @@ class TmhiDatabase {
         // load permissions for user (if the user has at least one role)
         $permissions = [];
         if (count($roles)) {
-            $statement = $this->_conn->prepare('
+            $rows = $this->_queryAll('
                 SELECT permissions.id as id, permissions.name as name, permissions.comment as comment
                 FROM rolepermissions
                 JOIN permissions ON rolepermissions.permissionid=permissions.id
                 WHERE rolepermissions.roleid IN (' . join(',', array_fill(0, count($roles), '?')) . ')
-            ');
-            $statement->execute(array_keys($roles));
-            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+            ', array_keys($roles));
     
             // map permissions into an array
             foreach ($rows as $row) {
