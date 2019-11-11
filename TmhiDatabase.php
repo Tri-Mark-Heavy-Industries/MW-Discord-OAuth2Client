@@ -4,15 +4,20 @@ require_once __DIR__.'/TmhiMember.php';
 class TmhiDatabase {
     private $_conn;
 
-	public function __construct($dbHost, $dbDatabase, $dbUser, $dbPassword) {
+    public function __construct($dbHost, $dbDatabase, $dbUser, $dbPassword) {
         // open the database using provided credentials
         $this->_conn = new PDO("mysql:host=$dbHost;dbname=$dbDatabase", $dbUser, $dbPassword);
 
         // set the PDO error mode to exception
         $this->_conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-	}
-
-	public function storeAccessToken($discordId, $accessToken)	{
+    }
+    
+    /**
+     * Store a Discord member's access token
+     * @param Snowflake $guildMember The member who owns the access token
+     * @param League\OAuth2\Client\Token\AccessToken $accessToken The access token to store
+     */
+    public function storeAccessToken($discordId, $accessToken)    {
         $token        = $accessToken->getToken();
         $expires      = $accessToken->getExpires();
         $refreshToken = $accessToken->getRefreshToken();
@@ -29,9 +34,13 @@ class TmhiDatabase {
             'tokenexpires' => $expires,
             'refreshtoken' => $refreshToken,
         ]);
-	}
+    }
 
-	public function storeTmhiMember($tmhiMember) {
+    /**
+     * Store a T-MHI member
+     * @param TmhiMember $tmhiMember The member to add
+     */
+    public function storeTmhiMember($tmhiMember) {
         $statement = $this->_conn->prepare('
             UPDATE members
             SET wikiid=:wikiid, email=:email
@@ -44,13 +53,12 @@ class TmhiDatabase {
         ]);
     }
     
-    /*
-    * Retrieve a Discord user from the database.
-    *
-    * @param    discordId  The Discord Snowflake ID of the user to load from the database.
-    * @returns  A TmhiMember object.
+    /**
+    * Retrieve a T-MHI member from the database
+    * @param Snowflake $discordId The Discord Snowflake ID of the user
+    * @return TmhiMember The requested member
     */
-	public function loadTmhiMember($discordId) {
+    public function loadTmhiMember($discordId) {
         // load user
         $statement = $this->_conn->prepare('
             SELECT displayname, wikiid, email, timezone
@@ -113,7 +121,7 @@ class TmhiDatabase {
             }
         }
 
-		return new TmhiMember(
+        return new TmhiMember(
             $discordId,
             $displayName,
             $permissions,
@@ -121,5 +129,5 @@ class TmhiDatabase {
             $email,
             $timezone
         );
-	}
+    }
 }
