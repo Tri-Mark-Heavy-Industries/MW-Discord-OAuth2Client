@@ -16,24 +16,28 @@ class TmhiDatabase {
      * Create, bind, execute and fetch a single result of a SQL query
      * @param string $sql The query to execute
      * @param string $params Parameters to bind
-     * @param array A single result in a named array
+     * @param array A single result in a named array. SELECT statements only
      */
     private function _query($sql, $params) {
         $statement = $this->_conn->prepare($sql);
         $statement->execute($params);
-        return $statement->fetch(PDO::FETCH_ASSOC);
+        if (substr(trim($sql), 0, 6) === 'SELECT') {
+            return $statement->fetch(PDO::FETCH_ASSOC);
+        }
     }
 
     /**
      * Create, bind, execute and fetch all results of a SQL query
      * @param string $sql The query to execute
      * @param string $params Parameters to bind
-     * @param array[] An array of results in named arrays
+     * @param array[] An array of results in named arrays. SELECT statements only
      */
     private function _queryAll($sql, $params) {
         $statement = $this->_conn->prepare($sql);
         $statement->execute($params);
-        return $statement->fetchAll(PDO::FETCH_ASSOC);
+        if (substr(trim($sql), 0, 6) === 'SELECT') {
+            return $statement->fetchAll(PDO::FETCH_ASSOC);
+        }
     }
     
     /**
@@ -125,7 +129,7 @@ class TmhiDatabase {
         $rows = $this->_queryAll('
             SELECT id, permissions.guildid, name, permissions.comment
             FROM memberpermissions
-            JOIN permissions ON rolepermissions.permissionid=permissions.id
+            JOIN permissions ON memberpermissions.permissionid=permissions.id
             WHERE memberpermissions.memberid=:discordId
         ', [ 'discordId' => $discordId ]);
 
