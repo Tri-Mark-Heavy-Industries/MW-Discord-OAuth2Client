@@ -48,14 +48,14 @@ class TmhiDatabase {
 
         $this->_query('
             INSERT INTO members (id, discordtoken, discordtokenexpires, discordrefreshtoken)
-            VALUES (:id, :token, :tokenexpires, :refreshtoken)
+            VALUES (:id, :token, :tokenExpires, :refreshToken)
             ON DUPLICATE KEY
-            UPDATE discordtoken=:token, discordtokenexpires=:tokenexpires, discordrefreshtoken=:refreshtoken
+            UPDATE discordtoken=:token, discordtokenexpires=:tokenExpires, discordrefreshtoken=:refreshToken
         ', [
             'id'           => $discordId,
             'token'        => $token,
-            'tokenexpires' => $expires,
-            'refreshtoken' => $refreshToken,
+            'tokenExpires' => $expires,
+            'refreshToken' => $refreshToken,
         ]);
     }
 
@@ -66,12 +66,12 @@ class TmhiDatabase {
     public function storeTmhiMember($tmhiMember) {
         $this->_query('
             UPDATE members
-            SET wikiid=:wikiid, email=:email
-            WHERE id=:discordid
+            SET wikiid=:wikiId, email=:email
+            WHERE id=:discordId
         ', [
-            'wikiid'    => $tmhiMember->wikiId,
+            'wikiId'    => $tmhiMember->wikiId,
             'email'     => $tmhiMember->email,
-            'discordid' => $tmhiMember->discordId,
+            'discordId' => $tmhiMember->discordId,
         ]);
     }
     
@@ -85,48 +85,74 @@ class TmhiDatabase {
         $row = $this->_query('
             SELECT displayname, wikiid, email, timezone
             FROM members
-            WHERE id=:discordid
-        ', [ 'discordid' => $discordId ]);
+            WHERE id=:discordId
+        ', [ 'discordId' => $discordId ]);
 
         // no user found
         if (!$row) {
             return false;
         }
         $displayName = $row['displayname'];
-        $wikiid      = $row['wikiid'];
+        $wikiId      = $row['wikiid'];
         $email       = $row['email'];
         $timezone    = $row['timezone'];
 
         // load roles for user
         $rows = $this->_queryAll('
-            SELECT roles.id as id, roles.name as name, roles.comment as comment
+            SELECT id, roles.guildid, name, roles.comment, hexcolor, discordpermissions
             FROM memberroles
             JOIN roles ON memberroles.roleid=roles.id
-            WHERE memberroles.userid=:discordid
-        ', [ 'discordid' => $discordId ]);
+            WHERE memberroles.memberid=:discordId
+        ', [ 'discordId' => $discordId ]);
 
         // map roles into an array
         $roles = [];
         foreach ($rows as $row) {
             $roles[$row['id']] = [
+                'id'                 => $row['id'],
+                'uniqueId'           => $row['guildid'] . $row['id'],
+                'name'               => $row['name'],
+                'guildId'            => $row['guildid'],
+                'comment'            => $row['comment'],
+                'hexcolor'           => $row['hexcolor'],
+                'discordPermissions' => $row['discordpermissions'],
+            ];
+        }
+
+        $permissions = [];
+
+        // load personal permissions for the user
+        $rows = $this->_queryAll('
+            SELECT id, permissions.guildid, name, permissions.comment
+            FROM memberpermissions
+            JOIN permissions ON rolepermissions.permissionid=permissions.id
+            WHERE memberpermissions.memberid=:discordId
+        ', [ 'discordId' => $discordId ]);
+
+        // map permissions into an array
+        foreach ($rows as $row) {
+            $permissions[$row['id']] = [
+                'id'      => $row['id'],
+                'guildid' => $row['guildid'],
                 'name'    => $row['name'],
                 'comment' => $row['comment'],
             ];
         }
 
-        // load permissions for user (if the user has at least one role)
-        $permissions = [];
+        // load role-based permissions for user
         if (count($roles)) {
             $rows = $this->_queryAll('
-                SELECT permissions.id as id, permissions.name as name, permissions.comment as comment
+                SELECT id, permissions.guildid, name, permissions.comment
                 FROM rolepermissions
                 JOIN permissions ON rolepermissions.permissionid=permissions.id
-                WHERE rolepermissions.roleid IN (' . join(',', array_fill(0, count($roles), '?')) . ')
-            ', array_keys($roles));
+                WHERE CONCAT(rolepermissions.guildid, rolepermissions.roleid) IN (' . join(',', array_fill(0, count($roles), '?')) . ')
+            ', array_column($roles, 'uniqueId'));
     
             // map permissions into an array
             foreach ($rows as $row) {
                 $permissions[$row['id']] = [
+                    'id'      => $row['id'],
+                    'guildid' => $row['guildid'],
                     'name'    => $row['name'],
                     'comment' => $row['comment'],
                 ];
@@ -137,7 +163,7 @@ class TmhiDatabase {
             $discordId,
             $displayName,
             $permissions,
-            $wikiid,
+            $wikiId,
             $email,
             $timezone
         );
