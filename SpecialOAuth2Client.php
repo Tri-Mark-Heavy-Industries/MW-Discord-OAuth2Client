@@ -240,20 +240,23 @@ class SpecialOAuth2Client extends SpecialPage {
             // create new user
             $user = User::newFromName($username, 'creatable');
             if (!$user) {
-                throw new MWException('Could not create user with username:' . $username);
+                throw new MWException('Could not create user with username: ' . $username);
                 die();
             }
 
-            if (!$user->getId()) {
-                // MediaWiki recommends below code instead of addToDatabase to create user but it seems to fail.
-                // $authManager = MediaWiki\Auth\AuthManager::singleton();
-                // $authManager->autoCreateUser( $user, MediaWiki\Auth\AuthManager::AUTOCREATE_SOURCE_SESSION );
-                $user->addToDatabase();
+            // if the id exists then another user already has this username
+            if ($user->getId()) {
+                throw new MWException('Another user already has that username: ' . $username);
+                die();
             }
+            // MediaWiki recommends below code instead of addToDatabase to create user but it seems to fail.
+            // $authManager = MediaWiki\Auth\AuthManager::singleton();
+            // $authManager->autoCreateUser( $user, MediaWiki\Auth\AuthManager::AUTOCREATE_SOURCE_SESSION );
+            $user->addToDatabase();
 
             // add and confirm email
-            if (isset($email)) {
-                $user->setEmail($email);
+            if (isset($response['email'])) {
+                $user->setEmail($response['email']);
                 $user->confirmEmail();
             }
             
