@@ -28,6 +28,8 @@ $wgOAuth2Client['client']['id']     = ''; // The client ID assigned to you by th
 $wgOAuth2Client['client']['secret'] = ''; // The client secret assigned to you by the provider
 $wgOAuth2Client['configuration']['redirect_uri'] = ''; // URL for OAuth2 server to redirect to
 $wgOAuth2Client['configuration']['scopes'] = 'identity'; // Permissions, refer to https://discordapp.com/developers/docs/topics/oauth2#shared-resources-oauth2-scopes
+
+$wgWhitelistRead = ['Main Page', 'Special:UserLogin', 'Special:OAuth2Client', 'Special:OAuth2Client/redirect', 'Request Wiki Access', 'Join T-MHI'];
 ```
 
 The **Redirect URI** for your wiki should be:
